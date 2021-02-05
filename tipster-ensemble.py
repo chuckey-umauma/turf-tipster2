@@ -33,10 +33,12 @@ parser.add_argument('--num', '-n', type=int, default=18,
 					help='Max number of gates')
 parser.add_argument('--position', '-p', type=int, default=7,
 					help='Count number of gates')
-parser.add_argument('--horses', '-o', type=int, default=8000,
+parser.add_argument('--horses', '-o', type=int, default=300000,
 					help='Max number of horses')
 parser.add_argument('--algorizm', '-a', default='xgb',
 					help='Algorizm (xgb|lgbm|ensemble)')
+parser.add_argument('--yosou', '-y', default='',
+					help='Yosou race file')
 args = parser.parse_args()
 
 train_src = args.train
@@ -48,6 +50,7 @@ num_gates = args.num
 max_position = args.position
 max_horses = args.horses
 use_algorizm = args.algorizm
+yosou_file = args.yosou
 use_history = False
 
 if use_algorizm=='xgb':
@@ -151,6 +154,8 @@ if max_horses > 0:
 
 if len(test_src) > 0:
 	read_file(test_src, all_races_test)
+elif len(yosou_file) > 0:
+	read_file(yosou_file, all_races_test)
 
 horse_names.append('その他')
 horse_names.append('未出走')
@@ -216,13 +221,12 @@ def get_race_gets(all_races, all_races_rank, all_races_query, all_races_target):
 					horse_num = get_horse_i(result[1])
 					jockey_num = get_jockey_i(result[2])
 					target.append(([horse_num, jockey_num, where_num, baba_num, tenki_num, len_num] + get_horsemeta(result[1], date_s),min(e, max_position)))
-			random.shuffle(target)
 			all_races_query.append(len(target))
 			for tgt in target:
 				all_races_rank.append(tgt[0])
 				all_races_target.append(tgt[1])
 
-if len(test_src) > 0:
+if len(test_src) > 0 or len(yosou_file) > 0:
 	all_races_rank_test = []
 	all_races_query_test = []
 	all_races_target_test = []
@@ -246,6 +250,12 @@ if len(in_data)!=0 and len(in_meta)!=0:
 		predict_races_target.append([horse_num, jockey_num, where_num, baba_num, tenki_num, len_num] + get_horsemeta(g.split('|')[0], date_s))
 	predict_races_target = np.array(predict_races_target)
 	predict_validation_regression = np.zeros((len(predict_races_target),N_ansemble))
+
+if len(yosou_file) > 0:
+	all_races_rank_test = []
+	all_races_query_test = []
+	all_races_target_test = []
+	get_race_gets(all_races_test, all_races_rank_test, all_races_query_test, all_races_target_test)		
 
 all_races_train = np.array(all_races_train)
 
@@ -284,7 +294,7 @@ def main_xgb(fold_offset):
 			cur_ind += 1
 		return matrix
 	
-	if len(test_src) > 0:
+	if len(test_src) > 0 or len(yosou_file) > 0:
 		all_races_rank_test_x = get_matrix(all_races_rank_test)
 	if len(in_data)!=0 and len(in_meta)!=0:
 		predict_races_target_x = get_matrix(predict_races_target)
@@ -329,7 +339,7 @@ def main_xgb(fold_offset):
 		)
 		del xgtrain, xgvalid
 		
-		if len(test_src) > 0:
+		if len(test_src) > 0 or len(yosou_file) > 0:
 			dst = norm_racedata(xgb_clf.predict(DMatrix(all_races_rank_test_x)), all_races_query_test)
 			for dst_ind in range(len(dst)):
 				test_validation_regression[dst_ind][fold_offset+fold_id] = dst[dst_ind]
@@ -383,7 +393,7 @@ def main_lgbm(fold_offset):
 			verbose_eval=1
 		)
 		
-		if len(test_src) > 0:
+		if len(test_src) > 0 or len(yosou_file) > 0:
 			dst = norm_racedata(lgb_clf.predict(all_races_rank_test), all_races_query_test)
 			for dst_ind in range(len(dst)):
 				test_validation_regression[dst_ind][fold_offset+fold_id] = dst[dst_ind]
@@ -479,6 +489,24 @@ def main_emsemble():
 		df_outfile.write('競馬予想 in %s\n'%date_d.strftime('%Y/%m/%d %H:%M:%S'))
 		for j,i in zip(range(len(order)),order):
 			df_outfile.write('%d着予想：%s\t%s\n'%(j+1,horse[i],str(predict_validation_result[i])))
+
+	if len(yosou_file) > 0:
+		date_d = datetime.datetime.today()
+		df_outfile.write('競馬予想 in %s\n'%date_d.strftime('%Y/%m/%d %H:%M:%S'))
+
+		cur_pos = 0
+		test_validation_result = test_validation_regression.mean(axis=1)
+		for i, o in zip(all_races_query_test, all_races_test):
+			order = np.argsort(test_validation_result[cur_pos:cur_pos+i])
+			horse = []
+			for e in range(1, len(o)):
+				horse.append(o[e].split('|')[1])
+
+			df_outfile.write(o[0].split('|')[1] + ' ' + o[0].split('|')[0] + '\n')
+			for j,k in zip(range(len(order)),order):
+				df_outfile.write('%d着予想：%s\t%s\n'%(j+1,horse[k],str((test_validation_result[cur_pos:cur_pos+i])[k])))
+
+			cur_pos = cur_pos+i
 
 if __name__ == '__main__':
 	if use_algorizm=='xgb':
