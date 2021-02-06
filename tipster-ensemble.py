@@ -217,10 +217,10 @@ def get_race_gets(all_races, all_races_rank, all_races_query, all_races_target):
 			for e in range(1, len(race)):
 				entry = race[e]
 				result = entry.split('|')
-				if len(result) >= 3:
+				if len(result) >= 3 and int(result[0]) > 0:
 					horse_num = get_horse_i(result[1])
 					jockey_num = get_jockey_i(result[2])
-					target.append(([horse_num, jockey_num, where_num, baba_num, tenki_num, len_num] + get_horsemeta(result[1], date_s),min(e, max_position)))
+					target.append(([horse_num, jockey_num, where_num, baba_num, tenki_num, len_num] + get_horsemeta(result[1], date_s),min(int(result[0]), max_position)))
 			all_races_query.append(len(target))
 			for tgt in target:
 				all_races_rank.append(tgt[0])
@@ -250,12 +250,6 @@ if len(in_data)!=0 and len(in_meta)!=0:
 		predict_races_target.append([horse_num, jockey_num, where_num, baba_num, tenki_num, len_num] + get_horsemeta(g.split('|')[0], date_s))
 	predict_races_target = np.array(predict_races_target)
 	predict_validation_regression = np.zeros((len(predict_races_target),N_ansemble))
-
-if len(yosou_file) > 0:
-	all_races_rank_test = []
-	all_races_query_test = []
-	all_races_target_test = []
-	get_race_gets(all_races_test, all_races_rank_test, all_races_query_test, all_races_target_test)		
 
 all_races_train = np.array(all_races_train)
 
@@ -414,7 +408,7 @@ def main_emsemble():
 		cur_pos = 0
 		
 		test_validation_result = test_validation_regression.mean(axis=1)
-		for i, o in zip(all_races_query_test, race_odds):
+		for i, o, r in zip(all_races_query_test, race_odds, all_races_test):
 			order = np.argsort(test_validation_result[cur_pos:cur_pos+i])
 			order_t = np.argsort(all_races_target_test[cur_pos:cur_pos+i])
 			if order[0] == order_t[0]:  # 単勝あたり
@@ -466,6 +460,7 @@ def main_emsemble():
 				ret_score[7] += o[10]
 				ret_hitnum[7] += 1
 			if order[0] == order_t[0] and order[1] == order_t[1] and order[2] == order_t[2]:  # 三連単あたり
+				df_outfile.write(r[0].split('|')[6] + ':' + r[0].split('|')[1] + ' ' + r[0].split('|')[0] + ':' + r[1].split('|')[1] + '-' + r[2].split('|')[1] + '-' + r[3].split('|')[1] + '\n')
 				ret_score[8] += o[11]
 				ret_hitnum[8] += 1
 			num_retrace = num_retrace+1
