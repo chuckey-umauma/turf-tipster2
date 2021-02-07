@@ -226,11 +226,33 @@ def get_race_gets(all_races, all_races_rank, all_races_query, all_races_target):
 				all_races_rank.append(tgt[0])
 				all_races_target.append(tgt[1])
 
+def get_race_gets_test(all_races, all_races_rank, all_races_query, all_races_target):
+	for race in all_races:
+		race_meta = race[0].split('|')
+		if len(race_meta) > 6:
+			where_num = where_i.transform([race_meta[1]])[0]
+			baba_num = baba_i.transform([race_meta[2]])[0]
+			tenki_num = tenki_i.transform([race_meta[4]])[0]
+			len_num = int(race_meta[3])
+			date_s = race_meta[6]
+			target = []
+			for e in range(1, len(race)):
+				entry = race[e]
+				result = entry.split('|')
+				if len(result) >= 3:
+					horse_num = get_horse_i(result[1])
+					jockey_num = get_jockey_i(result[2])
+					target.append(([horse_num, jockey_num, where_num, baba_num, tenki_num, len_num] + get_horsemeta(result[1], date_s),min(int(result[0]), max_position)))
+			all_races_query.append(len(target))
+			for tgt in target:
+				all_races_rank.append(tgt[0])
+				all_races_target.append(tgt[1])
+
 if len(test_src) > 0 or len(yosou_file) > 0:
 	all_races_rank_test = []
 	all_races_query_test = []
 	all_races_target_test = []
-	get_race_gets(all_races_test, all_races_rank_test, all_races_query_test, all_races_target_test)
+	get_race_gets_test(all_races_test, all_races_rank_test, all_races_query_test, all_races_target_test)
 	all_races_rank_test = np.array(all_races_rank_test)
 	all_races_query_test = np.array(all_races_query_test)
 	all_races_target_test = np.array(all_races_target_test)
@@ -409,6 +431,10 @@ def main_emsemble():
 		
 		test_validation_result = test_validation_regression.mean(axis=1)
 		for i, o, r in zip(all_races_query_test, race_odds, all_races_test):
+			if np.isnan((test_validation_result[cur_pos:cur_pos+i])[0]):
+				cur_pos = cur_pos+i
+				continue
+
 			order = np.argsort(test_validation_result[cur_pos:cur_pos+i])
 			order_t = np.argsort(all_races_target_test[cur_pos:cur_pos+i])
 			if order[0] == order_t[0]:  # 単勝あたり
@@ -460,7 +486,7 @@ def main_emsemble():
 				ret_score[7] += o[10]
 				ret_hitnum[7] += 1
 			if order[0] == order_t[0] and order[1] == order_t[1] and order[2] == order_t[2]:  # 三連単あたり
-				df_outfile.write(r[0].split('|')[6] + ':' + r[0].split('|')[1] + ' ' + r[0].split('|')[0] + ':' + r[1].split('|')[1] + '-' + r[2].split('|')[1] + '-' + r[3].split('|')[1] + '\n')
+				df_outfile.write(r[0].split('|')[6] + ':' + r[0].split('|')[1] + ' ' + r[0].split('|')[0] + ':' + r[order[0]+1].split('|')[1] + '-' + r[order[1]+1].split('|')[1] + '-' + r[order[2]+1].split('|')[1] + '\n')
 				ret_score[8] += o[11]
 				ret_hitnum[8] += 1
 			num_retrace = num_retrace+1
@@ -497,7 +523,7 @@ def main_emsemble():
 			for e in range(1, len(o)):
 				horse.append(o[e].split('|')[1])
 
-			df_outfile.write(o[0].split('|')[1] + ' ' + o[0].split('|')[0] + '\n')
+			df_outfile.write(o[0].split('|')[6] + ' ' + o[0].split('|')[1] + ' ' + o[0].split('|')[0] + '\n')
 			for j,k in zip(range(len(order)),order):
 				df_outfile.write('%d着予想：%s\t%s\n'%(j+1,horse[k],str((test_validation_result[cur_pos:cur_pos+i])[k])))
 
